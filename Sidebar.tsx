@@ -13,14 +13,14 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ user, realUser, activeTab, setActiveTab, onLogout }) => {
   const visibleUsers = AuthService.getVisibleUsers(user);
-  const canSeeAdminModules = AuthService.hasPermission(user, 'ADMIN_MODULES');
+  const canViewLogs = AuthService.canViewLogs(user);
   const isSuperAdmin = user.role === UserRole.SUPER_ADMIN;
 
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: '📊' },
     ...(visibleUsers.length > 0 ? [{ id: 'users', label: 'Portfolios', icon: '💼' }] : []),
-    ...(isSuperAdmin ? [{ id: 'permissions', label: 'Role Permissions', icon: '🔒' }] : []),
-    ...(canSeeAdminModules ? [{ id: 'logs', label: 'Compliance', icon: '🛡️' }] : []),
+    ...(isSuperAdmin ? [{ id: 'permissions', label: 'Permissions', icon: '🔒' }] : []),
+    ...(canViewLogs ? [{ id: 'logs', label: 'Compliance', icon: '🛡️' }] : []),
   ];
 
   return (
@@ -36,7 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, realUser, activeTab, setActiveT
           <p className="font-black text-lg text-white truncate">{user.name}</p>
           <div className="mt-4 flex items-center space-x-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Session Node</span>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Node</span>
           </div>
         </div>
       </div>
@@ -67,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, realUser, activeTab, setActiveT
           className="w-full flex items-center space-x-4 px-6 py-4 text-slate-500 hover:text-white hover:bg-red-500/10 hover:border-red-500/20 rounded-2xl transition-all border border-transparent"
         >
           <span className="text-xl">🚪</span>
-          <span className="font-black text-xs uppercase tracking-widest">Terminate Session</span>
+          <span className="font-black text-xs uppercase tracking-widest">End Session</span>
         </button>
       </div>
     </aside>

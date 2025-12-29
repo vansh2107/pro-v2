@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, UserRole, ActionType } from '../types';
-import { users, updatePermission, getPermissions, addAuditLog, getFamilyMembers } from '../db';
+import { User, UserRole } from '../types';
+import { users, addAuditLog, getFamilyMembers, addUser, updateUser, deleteUser } from '../db';
 import AuthService from '../authService';
 
 interface AdminPanelProps {
@@ -12,7 +12,9 @@ interface AdminPanelProps {
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboardView }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingPermsUser, setEditingPermsUser] = useState<User | null>(null);
+  const [manageUser, setManageUser] = useState<User | null>(null);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   const visibleUsers = AuthService.getVisibleUsers(actor);
   const filteredUsers = visibleUsers.filter(u => 
@@ -20,33 +22,76 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const canEdit = AuthService.hasPermission(actor, 'EDIT_CUSTOMERS');
+  const canDelete = AuthService.hasPermission(actor, 'DELETE_CASCADE');
+
+  const handleCreateUser = (newUser: User) => {
+    addUser(newUser);
+    addAuditLog({
+      actorId: actor.id,
+      action: 'USER_CREATE',
+      details: `Created new user: ${newUser.name} with role ${newUser.role}`,
+      timestamp: new Date().toISOString(),
+      severity: 'INFO'
+    });
+    setIsAddingUser(false);
+    setRefresh(r => r + refresh + 1);
+  };
+
+  const handleUpdateUser = (id: string, updates: Partial<User>) => {
+    updateUser(id, updates);
+    addAuditLog({
+      actorId: actor.id,
+      action: 'USER_UPDATE',
+      details: `Updated user ${id} details`,
+      timestamp: new Date().toISOString(),
+      severity: 'INFO'
+    });
+    setManageUser(null);
+    setRefresh(r => r + 1);
+  };
+
+  const handleDeleteUser = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete ${name}? This action is irreversible.`)) {
+      deleteUser(id);
+      addAuditLog({
+        actorId: actor.id,
+        action: 'USER_DELETE',
+        details: `Deleted user: ${name} (${id})`,
+        timestamp: new Date().toISOString(),
+        severity: 'CRITICAL'
+      });
+      setRefresh(r => r + 1);
+    }
+  };
+
   if (isDashboardView) {
     return (
-      <div className="space-y-10">
+      <div className="space-y-10 animate-in fade-in duration-500">
         <header className="flex justify-between items-center">
-            <h1 className="text-4xl font-black text-white tracking-tighter">Admin Core</h1>
+            <h1 className="text-4xl font-black text-white tracking-tighter">System Overview</h1>
             <div className="px-4 py-2 glass rounded-2xl border-white/5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                System Operator: <span className="text-blue-400">{actor.name}</span>
+                Node ID: <span className="text-blue-400">{actor.name.split(' ')[0]}</span>
             </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="glass p-10 rounded-[40px] border-white/5 relative overflow-hidden group">
              <div className="absolute top-0 right-0 p-8 text-8xl opacity-[0.03] translate-x-1/4 -translate-y-1/4 group-hover:scale-110 transition-transform">👥</div>
-             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Portfolio Clusters</p>
+             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Entity Registry</p>
              <p className="text-6xl font-black text-white tracking-tighter">{visibleUsers.filter(u => u.role === UserRole.CUSTOMER).length}</p>
           </div>
           <div className="glass p-10 rounded-[40px] border-white/5 relative overflow-hidden group">
              <div className="absolute top-0 right-0 p-8 text-8xl opacity-[0.03] translate-x-1/4 -translate-y-1/4 group-hover:scale-110 transition-transform">🛡️</div>
-             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Team Nodes</p>
+             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Active Units</p>
              <p className="text-6xl font-black text-blue-500 tracking-tighter">{visibleUsers.filter(u => u.role !== UserRole.CUSTOMER).length}</p>
           </div>
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-10 rounded-[40px] shadow-2xl shadow-blue-600/20 text-white relative overflow-hidden group">
              <div className="relative z-10">
-               <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-2">Network Protocol</p>
-               <p className="text-6xl font-black tracking-tighter">SECURE</p>
+               <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-2">Security Protocol</p>
+               <p className="text-6xl font-black tracking-tighter">HARDENED</p>
              </div>
-             <div className="absolute top-0 right-0 p-8 text-9xl opacity-20 translate-x-1/4 -translate-y-1/4 pointer-events-none group-hover:scale-110 transition-transform">💎</div>
+             <div className="absolute top-0 right-0 p-8 text-9xl opacity-20 translate-x-1/4 -translate-y-1/4 pointer-events-none group-hover:scale-110 transition-transform">🛡️</div>
           </div>
         </div>
       </div>
@@ -54,22 +99,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="glass rounded-[40px] border-white/5 overflow-hidden">
         <div className="p-10 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-8 bg-white/[0.01]">
           <div>
-            <h2 className="text-4xl font-black text-white tracking-tighter">Entity Explorer</h2>
-            <p className="text-slate-500 font-medium uppercase tracking-widest text-[10px] mt-2">Active accounts and permission matrices</p>
+            <h2 className="text-4xl font-black text-white tracking-tighter">Registry Console</h2>
+            <p className="text-slate-500 font-medium uppercase tracking-widest text-[10px] mt-2">Managing tier capabilities and entity nodes</p>
           </div>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search by ID or Label..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-14 pr-8 py-5 glass border-white/5 rounded-[24px] w-full md:w-[450px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all text-sm font-medium text-white placeholder:text-slate-600"
-            />
-            <span className="absolute left-6 top-5 opacity-30 text-xl">🔍</span>
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search Identity..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-14 pr-8 py-5 glass border-white/5 rounded-[24px] w-full md:w-[350px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all text-sm font-medium text-white placeholder:text-slate-600 outline-none"
+              />
+              <span className="absolute left-6 top-5 opacity-30 text-xl">🔍</span>
+            </div>
+            {canEdit && (
+              <button 
+                onClick={() => setIsAddingUser(true)}
+                className="bg-blue-600 text-white px-8 py-5 rounded-[24px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 border border-blue-500/30"
+              >
+                + New Node
+              </button>
+            )}
           </div>
         </div>
 
@@ -77,9 +132,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-white/5">
-                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Registry Entity</th>
-                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Protocol Rank</th>
-                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Metric</th>
+                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Identity Label</th>
+                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Auth Tier</th>
+                <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px]">Registry State</th>
                 <th className="py-8 px-10 font-black text-slate-500 uppercase tracking-widest text-[10px] text-right">Access Link</th>
               </tr>
             </thead>
@@ -107,21 +162,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
                     </span>
                   </td>
                   <td className="py-8 px-10">
-                    {u.role === UserRole.CUSTOMER ? (
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1 rounded-lg">
-                         {getFamilyMembers(u.id).length} Nodes
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest italic opacity-50">Base Rank</span>
-                    )}
+                    <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active State</span>
+                    </div>
                   </td>
-                  <td className="py-8 px-10 text-right space-x-6">
-                    {AuthService.canManagePermissions(actor, u) && (
+                  <td className="py-8 px-10 text-right space-x-4">
+                    {canEdit && (
                       <button 
-                        onClick={() => setEditingPermsUser(u)}
-                        className="text-blue-500 font-black text-[10px] uppercase tracking-widest hover:text-blue-300 transition-colors"
+                        onClick={() => setManageUser(u)}
+                        className="text-slate-500 font-black text-[10px] uppercase tracking-widest hover:text-white transition-colors"
                       >
-                        Permission Matrix
+                        Node Specs
                       </button>
                     )}
                     {AuthService.canImpersonate(actor, u) && (
@@ -132,6 +184,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
                         Enter Node
                       </button>
                     )}
+                    {canDelete && (
+                      <button 
+                        onClick={() => handleDeleteUser(u.id, u.name)}
+                        className="text-red-500/40 hover:text-red-500 transition-colors"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -140,87 +200,123 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ actor, onImpersonate, isDashboa
         </div>
       </div>
 
-      {editingPermsUser && (
-        <div className="fixed inset-0 bg-[#070A14]/80 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in zoom-in duration-300">
-           <div className="glass rounded-[48px] border-white/10 w-full max-w-lg p-12 shadow-2xl">
-              <h3 className="text-4xl font-black text-white mb-2 tracking-tighter">Auth Matrix</h3>
-              <p className="text-sm text-slate-500 mb-10 font-medium">Overwriting protocols for <span className="font-black text-blue-400">{editingPermsUser.name}</span></p>
-              
-              <PermissionSelector 
-                 user={editingPermsUser} 
-                 onClose={() => setEditingPermsUser(null)} 
-                 actor={actor}
-              />
-           </div>
-        </div>
+      {isAddingUser && (
+        <UserManagementModal 
+          onClose={() => setIsAddingUser(false)}
+          onSave={handleCreateUser}
+          mode="CREATE"
+        />
+      )}
+
+      {manageUser && (
+        <UserManagementModal 
+          user={manageUser}
+          onClose={() => setManageUser(null)}
+          onSave={(updates) => handleUpdateUser(manageUser.id, updates)}
+          mode="EDIT"
+        />
       )}
     </div>
   );
 };
 
-const PermissionSelector: React.FC<{ user: User, actor: User, onClose: () => void }> = ({ user, actor, onClose }) => {
-    const allActions: ActionType[] = ['VIEW', 'EDIT', 'DELETE', 'MANAGE_PERMISSIONS', 'IMPERSONATE', 'VIEW_LOGS'];
-    
-    // Use a representative 'SYSTEM' target ID to hydrate state for the user's global capabilities
-    const [selected, setSelected] = useState<ActionType[]>([]);
+const UserManagementModal: React.FC<{ 
+  user?: User; 
+  onClose: () => void; 
+  onSave: (u: any) => void;
+  mode: 'CREATE' | 'EDIT';
+}> = ({ user, onClose, onSave, mode }) => {
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [role, setRole] = useState<UserRole>(user?.role || UserRole.CUSTOMER);
+  const [assignedTo, setAssignedTo] = useState(user?.assignedTo || '');
 
-    useEffect(() => {
-        // Hydrate from backend state on mount
-        const currentPerms = getPermissions().find(p => p.userId === user.id && p.targetId === 'SYSTEM')?.actions || [];
-        setSelected(currentPerms);
-    }, [user.id]);
+  const associates = users.filter(u => u.role === UserRole.ASSOCIATE);
 
-    const handleToggle = (a: ActionType) => {
-        setSelected(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]);
-    };
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !email) return;
 
-    const handleSave = () => {
-        // Enforce hierarchy at the API level (simulated here)
-        if (!AuthService.canManagePermissions(actor, user)) {
-            alert("Unauthorized: Rank hierarchy violation.");
-            onClose();
-            return;
-        }
+    onSave({
+      id: user?.id || Math.random().toString(36).substr(2, 9),
+      name,
+      email,
+      role,
+      assignedTo: role === UserRole.CUSTOMER ? assignedTo : undefined
+    });
+  };
 
-        // Persist permissions for 'SYSTEM' (hydration target) and all other applicable targets
-        updatePermission(user.id, 'SYSTEM', selected);
-        users.forEach(target => {
-            if (target.id !== user.id) {
-                updatePermission(user.id, target.id, selected);
-            }
-        });
-        
-        addAuditLog({ 
-          actorId: actor.id, 
-          action: 'PERMISSION_UPDATE', 
-          details: `Updated permissions for ${user.name} across target families to [${selected.join(', ')}]`, 
-          timestamp: new Date().toISOString(), 
-          severity: 'CRITICAL' 
-        });
-        onClose();
-    };
-
-    return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-3">
-                {allActions.map(a => (
-                    <label key={a} className="flex items-center space-x-5 p-5 glass glass-hover rounded-[24px] border-white/5 cursor-pointer transition-all">
-                        <input 
-                            type="checkbox" 
-                            checked={selected.includes(a)} 
-                            onChange={() => handleToggle(a)}
-                            className="w-6 h-6 rounded-lg border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500/50"
-                        />
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{a.replace('_', ' ')}</span>
-                    </label>
-                ))}
-            </div>
-            <div className="flex space-x-6 pt-10 mt-6 border-t border-white/5">
-                <button onClick={onClose} className="flex-1 py-5 text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-widest transition-colors">Discard</button>
-                <button onClick={handleSave} className="flex-1 py-5 text-[10px] font-black text-white bg-blue-600 rounded-[24px] shadow-2xl shadow-blue-600/20 uppercase tracking-widest hover:scale-105 transition-transform border border-blue-500">Commit Changes</button>
-            </div>
+  return (
+    <div className="fixed inset-0 bg-[#070A14]/90 backdrop-blur-xl z-[300] flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+      <div className="glass rounded-[48px] border-white/10 w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="p-10 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+          <h3 className="text-3xl font-black text-white tracking-tighter">{mode === 'CREATE' ? 'Onboard Node' : 'Node Configuration'}</h3>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl transition-all text-slate-400 hover:text-white">✕</button>
         </div>
-    );
+        
+        <form onSubmit={handleSubmit} className="p-10 space-y-6">
+          <div className="space-y-4">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Identity Node Name</label>
+            <input 
+              type="text" 
+              value={name} 
+              onChange={e => setName(e.target.value)}
+              className="w-full bg-white/5 border border-white/5 p-5 rounded-2xl text-sm text-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all outline-none"
+              placeholder="e.g. Frank Family Node"
+              required
+            />
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Secure Endpoint Email</label>
+            <input 
+              type="email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)}
+              className="w-full bg-white/5 border border-white/5 p-5 rounded-2xl text-sm text-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all outline-none"
+              placeholder="vault@node.io"
+              required
+            />
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Tier Rank</label>
+            <select 
+              value={role} 
+              onChange={e => setRole(e.target.value as UserRole)}
+              className="w-full bg-white/5 border border-white/5 p-5 rounded-2xl text-sm text-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all outline-none appearance-none"
+              disabled={user?.id === 'a'}
+            >
+              {Object.values(UserRole).map(r => <option key={r} value={r} className="bg-navy-950">{r.replace('_', ' ')}</option>)}
+            </select>
+          </div>
+
+          {role === UserRole.CUSTOMER && (
+            <div className="space-y-4">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Cluster Associate</label>
+              <select 
+                value={assignedTo} 
+                onChange={e => setAssignedTo(e.target.value)}
+                className="w-full bg-white/5 border border-white/5 p-5 rounded-2xl text-sm text-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/30 transition-all outline-none appearance-none"
+              >
+                <option value="" className="bg-navy-950">None Assigned</option>
+                {associates.map(a => <option key={a.id} value={a.id} className="bg-navy-950">{a.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="pt-6">
+            <button 
+              type="submit"
+              className="w-full bg-blue-600 text-white py-5 rounded-[24px] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 border border-blue-500/30"
+            >
+              {mode === 'CREATE' ? 'Commit Registry Entry' : 'Update Node Specs'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default AdminPanel;

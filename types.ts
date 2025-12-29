@@ -3,7 +3,7 @@ export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   ASSOCIATE = 'ASSOCIATE',
-  CUSTOMER = 'CUSTOMER' // Now represents a "Family Account"
+  CUSTOMER = 'CUSTOMER' 
 }
 
 export enum AssetType {
@@ -16,26 +16,32 @@ export enum AssetType {
   TERM_INSURANCE = 'Term Insurance'
 }
 
-export type ActionType = 'VIEW' | 'EDIT' | 'DELETE' | 'MANAGE_PERMISSIONS' | 'IMPERSONATE' | 'VIEW_LOGS';
+// These represent the specific capability columns requested
+export type PermissionKey = 
+  | 'ADMIN_MODULES' 
+  | 'ASSOCIATES' 
+  | 'CUSTOMERS' 
+  | 'WHOLE_FAMILY' 
+  | 'EDIT_CUSTOMERS' 
+  | 'DELETE_CASCADE' 
+  | 'DOWNLOAD_PDF';
 
-export interface Permission {
-  id: string;
-  userId: string;       // Actor ID
-  targetId: string;     // Family Account ID or System Resource
-  actions: ActionType[];
+export interface RolePermission {
+  role: UserRole;
+  permissions: Record<PermissionKey, boolean>;
 }
 
 export interface User {
   id: string;
-  name: string; // Family Name (e.g., "Isabella Family")
+  name: string; 
   role: UserRole;
   email: string;
-  assignedTo?: string; // Associate ID
+  assignedTo?: string; 
 }
 
 export interface FamilyMember {
   id: string;
-  familyId: string; // Links to User.id (CUSTOMER)
+  familyId: string; 
   name: string;
   relationship: string;
 }
@@ -43,7 +49,7 @@ export interface FamilyMember {
 export interface Asset {
   id: string;
   familyId: string;
-  memberId: string; // ID of the specific family member
+  memberId: string; 
   type: AssetType;
   value: number;
   details: Record<string, any>;
@@ -63,7 +69,7 @@ export interface Document {
 export interface AuditLog {
   id: string;
   actorId: string;
-  actingAsId?: string; // ID of the family account being impersonated
+  actingAsId?: string; 
   targetId?: string;
   action: string;
   details: string;

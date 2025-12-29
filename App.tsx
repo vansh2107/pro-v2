@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole, AuthState, AuditLog } from './types';
 import { users, getAuditLogs, addAuditLog } from './db';
 import AuthService from './authService';
@@ -8,6 +8,7 @@ import AdminPanel from './components/AdminPanel';
 import AssociateDashboard from './components/AssociateDashboard';
 import CustomerDashboard from './components/CustomerDashboard';
 import ImpersonationBanner from './components/ImpersonationBanner';
+import PermissionTable from './components/PermissionTable';
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({ currentUser: null, actingUser: null, isImpersonating: false });
@@ -15,6 +16,13 @@ const App: React.FC = () => {
 
   const currentUser = auth.currentUser;
   const actingUser = auth.actingUser;
+
+  // Access Control Redirect: Role Permissions ONLY for SUPER_ADMIN
+  useEffect(() => {
+    if (activeTab === 'permissions' && currentUser?.role !== UserRole.SUPER_ADMIN) {
+      setActiveTab('dashboard');
+    }
+  }, [activeTab, currentUser]);
 
   const handleLogin = (id: string) => {
     const user = AuthService.login(id);
@@ -73,7 +81,7 @@ const App: React.FC = () => {
           </div>
           
           <div className="space-y-4">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Identity Selection</label>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1 text-center">Identity Selection Core</label>
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {users.map(u => (
                 <button 
@@ -99,7 +107,7 @@ const App: React.FC = () => {
           </div>
           
           <p className="mt-8 text-center text-xs text-slate-600 font-medium">
-            Authorized Personnel Only • Secure 256-bit AES
+            Authorized Personnel Only • Secure Protocol Active
           </p>
         </div>
       </div>
@@ -136,8 +144,12 @@ const App: React.FC = () => {
             <AdminPanel actor={currentUser} onImpersonate={handleImpersonate} isDashboardView={false} />
           )}
 
+          {activeTab === 'permissions' && currentUser.role === UserRole.SUPER_ADMIN && (
+            <PermissionTable currentUser={currentUser} />
+          )}
+
           {activeTab === 'logs' && AuthService.canViewLogs(currentUser) && (
-            <div className="glass rounded-[32px] p-8 border-white/5">
+            <div className="glass rounded-[32px] p-8 border-white/5 animate-in fade-in duration-500">
               <div className="flex justify-between items-center mb-10">
                 <h2 className="text-3xl font-black text-white tracking-tight">System Compliance</h2>
                 <div className="px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-black text-blue-400 uppercase tracking-widest">Live Audit</div>
